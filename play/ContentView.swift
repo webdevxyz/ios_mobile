@@ -1,57 +1,138 @@
 import SwiftUI
-
-struct Movie: Identifiable {
-    var id = UUID()
-    var title: String
-}
-
-struct SectionItem: Identifiable {
-    var id = UUID()
-    var title: String
-    var movies: [Movie]
-}
+import Foundation
 
 struct ContentView: View {
-    let sectionData = [
-        SectionItem(title: "Comedy", movies: [Movie(title: "Movie 1"), Movie(title: "Movie 2"), Movie(title: "Movie 3")]),
-        SectionItem(title: "Action", movies: [Movie(title: "Movie 4"), Movie(title: "Movie 5"), Movie(title: "Movie 6")]),
-        SectionItem(title: "Drama", movies: [Movie(title: "Movie 7"), Movie(title: "Movie 8"), Movie(title: "Movie 9")])
-    ]
+    @ObservedObject var viewModel = ContentViewModel()
 
     var body: some View {
-        List(sectionData) { section in
-            Section(header: Text(section.title)) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 20) {
-                        ForEach(section.movies) { movie in
-                            MovieItem(movie: movie)
+        List {
+            ForEach(viewModel.sectionData.indices, id: \.self) { sectionIndex in
+                let section = viewModel.sectionData[sectionIndex]
+                Section(header: Text(section.title)) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(section.children.indices, id: \.self) { movieIndex in
+                                let movie = section.children[movieIndex]
+                                VStack {
+                                    Text(movie.title)
+                                        .font(.headline)
+                                    RemoteImage(url: movie.poster)
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 120, height: 160) // Adjust card size here
+                                        .clipped()
+                                        .cornerRadius(10)
+                                }
+                            }
                         }
+                        .padding(.horizontal, 10) // Adjust padding here
                     }
-                    .padding()
+                    .background(Color.clear) // Remove white background
                 }
+                .listRowInsets(EdgeInsets()) // Remove extra padding and border from section
+                .padding(.vertical, -10) // Remove extra spacing
             }
         }
-        .listStyle(InsetGroupedListStyle())
-    }
-}
-
-struct MovieItem: View {
-    let movie: Movie
-    
-    var body: some View {
-        VStack {
-            Text(movie.title)
-                .padding()
-                .frame(width: 150, height: 200)
-                .background(Color.blue)
-                .cornerRadius(10)
-                .foregroundColor(.white)
-        }
+        .listStyle(PlainListStyle()) // Remove any default list style
     }
 }
 
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         ContentView()
+    }
+}
+
+class ContentViewModel: ObservableObject {
+    @Published var sectionData = [SectionItem]()
+
+    init() {
+        fetchData()
+    }
+
+    func fetchData() {
+        guard let url = URL(string: "https://cms.webdevxyz.com/json/featured.json") else {
+            return
+        }
+
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            guard let data = data else {
+                return
+            }
+
+            do {
+                let sectionData = try JSONDecoder().decode([SectionItem].self, from: data)
+                DispatchQueue.main.async {
+                    self.sectionData = sectionData
+                }
+            } catch {
+                print("Error decoding JSON: \(error)")
+            }
+        }.resume()
+    }
+}
+
+struct Movie: Codable {
+    var title: String
+    var banner: URL
+    var poster: URL
+    var duration: String
+    var categories: [String]
+    var cast: [Cast]
+}
+
+struct Cast: Codable {
+    var name: String
+    var image: URL
+    var bio: String
+    var type: String
+}
+
+struct SectionItem: Codable {
+    var title: String
+    var children: [Movie]
+}
+
+struct RemoteImage: View {
+    private var url: URL
+    @StateObject private var imageLoader = ImageLoader()
+
+    init(url: URL) {
+        self.url = url
+    }
+
+    var body: some View {
+        Image(uiImage: imageLoader.image ?? UIImage())
+            .resizable()
+            .scaledToFill()
+            .onAppear {
+                imageLoader.loadImage(from: url)
+            }
+    }
+}
+
+class ImageLoader: ObservableObject {
+    @Published var image: UIImage?
+
+    private var cache = NSCache<NSURL, UIImage>()
+    private var dataTask: URLSessionDataTask?
+
+    func loadImage(from url: URL) {
+        if let imageFromCache = cache.object(forKey: url as NSURL) {
+            self.image = imageFromCache
+            return
+        }
+
+        dataTask?.cancel()
+
+        dataTask = URLSession.shared.dataTask(with: url) { data, response, error in
+            guard let data = data, let newImage = UIImage(data: data) else { return }
+
+            DispatchQueue.main.async {
+                self.cache.setObject(newImage, forKey: url as NSURL)
+                self.image = newImage
+            }
+        }
+
+        dataTask?.resume()
     }
 }

@@ -6,39 +6,50 @@ struct ContentView: View {
 
     var body: some View {
         List {
-            ForEach(viewModel.sectionData.indices, id: \.self) { sectionIndex in
-                let section = viewModel.sectionData[sectionIndex]
+            ForEach(viewModel.sectionData.indices, id: \.self) { index in
+                let section = viewModel.sectionData[index]
                 Section(header: Text(section.title)) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(section.children.indices, id: \.self) { movieIndex in
-                                let movie = section.children[movieIndex]
-                                VStack {
+                    
+                    HStack {
+                        ForEach(section.children.indices, id: \.self) { movieIndex in
+                            let movie = section.children[movieIndex]
+
+                            if let posterURL = movie.poster, let url = URL(string: posterURL) {
+                                RemoteImage(url: url)
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 150, height: 200)
+                                    .clipped()
+                                    .cornerRadius(10)
+                            } else {
+                                ZStack {
+                                    Color.gray
+                                        .frame(width: 150, height: 200)
+                                        .cornerRadius(10)
+                                    
                                     Text(movie.title)
                                         .font(.headline)
-                                    RemoteImage(url: movie.poster)
-                                        .aspectRatio(contentMode: .fill)
-                                        .frame(width: 120, height: 160) // Adjust card size here
-                                        .clipped()
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                        .foregroundColor(.white)
+                                        .padding()
                                         .cornerRadius(10)
+                                        .padding()
                                 }
                             }
                         }
-                        .padding(.horizontal, 10) // Adjust padding here
                     }
-                    .background(Color.clear) // Remove white background
+
                 }
-                .listRowInsets(EdgeInsets()) // Remove extra padding and border from section
-                .padding(.vertical, -10) // Remove extra spacing
             }
         }
-        .listStyle(PlainListStyle()) // Remove any default list style
+        .listStyle(InsetGroupedListStyle())
     }
 }
 
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
-        ContentView()
+        ContentView(viewModel: ContentViewModel())
     }
 }
 
@@ -73,8 +84,8 @@ class ContentViewModel: ObservableObject {
 
 struct Movie: Codable {
     var title: String
-    var banner: URL
-    var poster: URL
+    var banner: String?
+    var poster: String?
     var duration: String
     var categories: [String]
     var cast: [Cast]
@@ -82,7 +93,7 @@ struct Movie: Codable {
 
 struct Cast: Codable {
     var name: String
-    var image: URL
+    var image: String
     var bio: String
     var type: String
 }
